@@ -8,7 +8,7 @@ QuickAnim — 快速动画与渲染助手
 使用：3D 视图右侧边栏（按 N 键）> QuickAnim 标签页。
 
 作者：DSH
-版本：1.2.1
+版本：1.3.0
 """
 
 import os
@@ -30,7 +30,7 @@ from bpy.types import Panel, Operator, AddonPreferences, PropertyGroup
 bl_info = {
     "name": "QuickAnim 快速动画与渲染助手",
     "author": "DSH",
-    "version": (1, 2, 1),
+    "version": (1, 3, 0),
     "blender": (3, 0, 0),
     "location": "3D 视图 > 侧边栏(N) > QuickAnim",
     "description": "一键 K 帧、MMD 风格摄像机、姿势复用、循环动画、快速渲染",
@@ -482,6 +482,129 @@ class QUICKANIM_OT_ease(Operator):
 
 
 # ---------------------------------------------------------------------------
+# 关键帧删除操作符
+# ---------------------------------------------------------------------------
+
+def _fcurve_target(dp):
+    """返回数据路径的最后一段（如 location、rotation_euler、lens）。"""
+    return dp.rsplit('.', 1)[-1].rsplit('[', 1)[0]
+
+
+def _remove_keys_at_frame(ad, frame, tol=0.5):
+    """在动画数据中删除当前帧附近的变换关键帧，返回删除数量。"""
+    if ad is None or ad.action is None:
+        return 0
+    allowed = ('location', 'rotation_euler', 'rotation_quaternion', 'scale', 'lens')
+    removed = 0
+    for fcu in ad.action.fcurves:
+        if _fcurve_target(fcu.data_path) not in allowed:
+            continue
+        for kp in list(fcu.keyframe_points):
+            if abs(kp.co.x - frame) <= tol:
+                try:
+                    fcu.keyframe_points.remove(kp, fast=True)
+                except TypeError:
+                    fcu.keyframe_points.remove(kp)
+                removed += 1
+    return removed
+
+
+class QUICKANIM_OT_delete_keys(Operator):
+    """删除当前帧的关键帧。"""
+    bl_idname = "quickanim.delete_keys"
+    bl_label = "删除当前帧关键帧"
+    bl_description = "删除选中物体/骨骼在当前帧的位置/旋转/缩放关键帧（摄像机含焦距）"
+
+    def execute(self, context):
+        frame = context.scene.frame_current
+        obj = context.object
+        removed = 0
+        allowed = ('location', 'rotation_euler', 'rotation_quaternion', 'scale', 'lens')
+
+        if _armature_in_pose_mode(context):
+            pbs = _selected_pose_bones(obj)
+            ad = getattr(obj, "animation_data", None)
+            if ad is not None and ad.action is not None:
+                prefixes = ['pose.bones["%s"]' % pb.name for pb in pbs]
+                for fcu in ad.action.fcurves:
+                    if not any(fcu.data_path.startswith(p) for p in prefixes):
+                        continue
+                    if _fcurve_target(fcu.data_path) not in allowed:
+                        continue
+                    for kp in list(fcu.keyframe_points):
+                        if abs(kp.co.x - frame) <= 0.5:
+                            try:
+                                fcu.keyframe_points.remove(kp, fast=True)
+                            except TypeError:
+                                fcu.keyframe_points.remove(kp)
+                            removed += 1
+        else:
+            objs = context.selected_objects
+            if not objs:
+                self.report({'WARNING'}, "请先选中要删除关键帧的物体/骨骼")
+                return {'CANCELLED'}
+            for o in objs:
+                removed += _remove_keys_at_frame(getattr(o, "animation_data", None), frame)
+                if o.type == 'CAMERA' and o.data is not None:
+                    removed += _remove_keys_at_frame(getattr(o.data, "animation_data", None), frame)
+
+        if removed:
+            msg = f"已删除 {removed} 个关键帧 @ 帧 {frame}"
+            if context.scene.tool_settings.use_keyframe_insert_auto or context.scene.quickanim.camera_auto_key:
+                msg += "（注意：自动关键帧/切帧自动注册开着，可能再次自动添加）"
+            self.report({'INFO'}, msg)
+        else:
+            self.report({'WARNING'}, f"当前帧 {frame} 没有找到可删除的关键帧")
+        return {'FINISHED'}
+
+
+class QUICKANIM_OT_clear_animation(Operator):
+    """清空选中物体/骨骼的全部动画。"""
+    bl_idname = "quickanim.clear_animation"
+    bl_label = "清空动画"
+    bl_description = "删除选中物体/骨骼的全部动画关键帧（保留驱动器，操作不可撤销）"
+
+    def execute(self, context):
+        obj = context.object
+        removed = 0
+
+        if _armature_in_pose_mode(context):
+            pbs = _selected_pose_bones(obj)
+            ad = getattr(obj, "animation_data", None)
+            if ad is not None and ad.action is not None:
+                prefixes = ['pose.bones["%s"]' % pb.name for pb in pbs]
+                to_remove = [f for f in ad.action.fcurves
+                             if any(f.data_path.startswith(p) for p in prefixes)]
+                for fcu in to_remove:
+                    ad.action.fcurves.remove(fcu)
+                    removed += 1
+        else:
+            objs = context.selected_objects
+            if not objs:
+                self.report({'WARNING'}, "请先选中要清空动画的物体/骨骼")
+                return {'CANCELLED'}
+            for o in objs:
+                ad = getattr(o, "animation_data", None)
+                if ad is not None and ad.action is not None:
+                    removed += len(ad.action.fcurves)
+                    ad.action = None
+                if o.type == 'CAMERA' and o.data is not None:
+                    cad = getattr(o.data, "animation_data", None)
+                    if cad is not None and cad.action is not None:
+                        removed += len(cad.action.fcurves)
+                        cad.action = None
+
+        if removed:
+            self.report({'INFO'}, f"已清空 {removed} 条动画曲线")
+        else:
+            self.report({'WARNING'}, "没有找到可清空的动画")
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+
+# ---------------------------------------------------------------------------
 # 摄像机（MMD 风格）操作符
 # ---------------------------------------------------------------------------
 
@@ -914,6 +1037,11 @@ class QUICKANIM_PT_main(Panel):
         e2 = row.operator("quickanim.ease", text="线性")
         e2.mode = 'LINEAR'
 
+        box.separator()
+        row = box.row(align=True)
+        row.operator("quickanim.delete_keys", text="删除当前帧关键帧", icon='X')
+        row.operator("quickanim.clear_animation", text="清空动画", icon='TRASH')
+
         # ---- 摄像机（MMD 风格）----
         box = layout.box()
         box.label(text="摄像机 (MMD 风格)", icon='VIEW_CAMERA')
@@ -983,6 +1111,8 @@ classes = (
     QUICKANIM_OT_snap_keys,
     QUICKANIM_OT_clean_keys,
     QUICKANIM_OT_ease,
+    QUICKANIM_OT_delete_keys,
+    QUICKANIM_OT_clear_animation,
     QUICKANIM_OT_ensure_camera,
     QUICKANIM_OT_key_camera,
     QUICKANIM_OT_fit_frame,

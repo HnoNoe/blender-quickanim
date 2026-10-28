@@ -27,7 +27,8 @@ check('scene_prop', hasattr(bpy.types.Scene, 'quickanim'))
 check('panel_registered', hasattr(bpy.types, 'QUICKANIM_PT_main'))
 for opid in ['quickanim.key_camera', 'quickanim.fit_frame', 'quickanim.mmd_mode',
              'quickanim.record_camera', 'quickanim.preset', 'quickanim.make_loop',
-             'quickanim.render_animation', 'quickanim.toggle_autokey']:
+             'quickanim.render_animation', 'quickanim.toggle_autokey',
+             'quickanim.delete_keys', 'quickanim.clear_animation']:
     check('op_' + opid.split('.')[1], hasattr(bpy.ops.quickanim, opid.split('.')[1]))
 
 # 3. 核心函数级测试：创建摄像机并 K 帧
@@ -97,13 +98,33 @@ USED_ICONS = [
     'ARMATURE_DATA', 'COPYDOWN', 'PASTEDOWN', 'MOD_MIRROR', 'FILE_REFRESH',
     'VIEW_CAMERA', 'CAMERA_DATA', 'FRAME_NEXT', 'CANCEL', 'REC',
     'RESTRICT_RENDER_OFF', 'FILE_IMAGE', 'FILE_MOVIE', 'PROP_CON',
-    'FILE_FOLDER', 'RENDER_STILL', 'RENDER_ANIMATION',
+    'FILE_FOLDER', 'RENDER_STILL', 'RENDER_ANIMATION', 'X', 'TRASH',
 ]
 if valid_icons is not None:
     missing = [i for i in USED_ICONS if i not in valid_icons]
     check('icons_all_valid', not missing)
     if missing:
         print('MISSING_ICONS:', missing)
+
+# 8. 删除关键帧功能
+try:
+    scene.frame_set(10)
+    cam_obj.select_set(True)
+    bpy.context.view_layer.objects.active = cam_obj
+    fcu0 = cam_obj.animation_data.action.fcurves[0]
+    before = len(fcu0.keyframe_points)
+    bpy.ops.quickanim.delete_keys()
+    after = len(fcu0.keyframe_points)
+    check('delete_keys_at_frame', after < before)
+except Exception as e:
+    check('delete_keys_at_frame: %r' % e, False)
+
+try:
+    bpy.ops.quickanim.clear_animation('EXEC_DEFAULT')
+    ad = cam_obj.animation_data
+    check('clear_animation', ad is None or ad.action is None)
+except Exception as e:
+    check('clear_animation: %r' % e, False)
 
 # 汇总
 fails = [n for n, ok in results if not ok]
