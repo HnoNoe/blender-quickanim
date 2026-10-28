@@ -83,6 +83,28 @@ try:
 except Exception as e:
     check('fit_settings: %r' % e, False)
 
+# 7. 图标有效性检查：面板用到的所有图标必须在当前 Blender 中存在
+try:
+    params = bpy.types.UILayout.bl_rna.functions['operator'].parameters['icon']
+    valid_icons = {i.identifier for i in params.enum_items}
+    check('icons_enum_available', True)
+except Exception:
+    valid_icons = None
+    check('icons_enum_available', False)
+
+USED_ICONS = [
+    'KEYINGSET', 'CHECKBOX_HLT', 'CHECKBOX_DEHLT', 'DECORATE_KEYFRAME',
+    'ARMATURE_DATA', 'COPYDOWN', 'PASTEDOWN', 'MOD_MIRROR', 'FILE_REFRESH',
+    'VIEW_CAMERA', 'CAMERA_DATA', 'FRAME_NEXT', 'CANCEL', 'REC',
+    'RESTRICT_RENDER_OFF', 'FILE_IMAGE', 'FILE_MOVIE', 'PROP_CON',
+    'FILE_FOLDER', 'RENDER_STILL', 'RENDER_ANIMATION',
+]
+if valid_icons is not None:
+    missing = [i for i in USED_ICONS if i not in valid_icons]
+    check('icons_all_valid', not missing)
+    if missing:
+        print('MISSING_ICONS:', missing)
+
 # 汇总
 fails = [n for n, ok in results if not ok]
 print('SUMMARY: %d/%d passed' % (len(results) - len(fails), len(results)))

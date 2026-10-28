@@ -8,7 +8,7 @@ QuickAnim — 快速动画与渲染助手
 使用：3D 视图右侧边栏（按 N 键）> QuickAnim 标签页。
 
 作者：DSH
-版本：1.2.0
+版本：1.2.1
 """
 
 import os
@@ -30,7 +30,7 @@ from bpy.types import Panel, Operator, AddonPreferences, PropertyGroup
 bl_info = {
     "name": "QuickAnim 快速动画与渲染助手",
     "author": "DSH",
-    "version": (1, 2, 0),
+    "version": (1, 2, 1),
     "blender": (3, 0, 0),
     "location": "3D 视图 > 侧边栏(N) > QuickAnim",
     "description": "一键 K 帧、MMD 风格摄像机、姿势复用、循环动画、快速渲染",
@@ -921,7 +921,7 @@ class QUICKANIM_PT_main(Panel):
         row = box.row(align=True)
         row.operator("quickanim.ensure_camera", text="选中摄像机", icon='CAMERA_DATA')
         row.operator("quickanim.mmd_mode", text="MMD 模式", icon='VIEW_CAMERA')
-        row.operator("quickanim.fit_frame", text="贴合画框", icon='BORDER_RECT')
+        row.operator("quickanim.fit_frame", text="贴合画框", icon='FRAME_NEXT')
 
         box.operator("quickanim.key_camera", icon='DECORATE_KEYFRAME')
 
