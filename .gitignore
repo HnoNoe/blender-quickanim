@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Blender
+*.blend1
+*.blend2
+.blend~
+render/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 临时文件
+_b_*.py
+_probe*.py
+_check*.py
